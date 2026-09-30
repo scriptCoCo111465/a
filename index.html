@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lua Deobfuscator</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <main class="container">
+    <header>
+      <h1>Lua Deobfuscator</h1>
+      <p>Lua 난독화 코드를 실행하지 않고 정적으로 분석합니다.</p>
+    </header>
+
+    <section class="grid">
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Input</h2>
+          <button id="clearBtn" class="secondary">Clear</button>
+        </div>
+        <textarea id="input" spellcheck="false" placeholder="난독화된 Lua 코드를 붙여넣으세요..."></textarea>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Output</h2>
+          <button id="copyBtn" class="secondary">Copy</button>
+        </div>
+        <textarea id="output" spellcheck="false" readonly placeholder="분석 결과가 여기에 표시됩니다..."></textarea>
+      </div>
+    </section>
+
+    <div class="actions">
+      <label class="toggle">
+        <input id="aiToggle" type="checkbox" checked>
+        <span>AI API</span>
+      </label>
+      <label class="passes">
+        Passes
+        <select id="passes">
+          <option value="1">1</option>
+          <option value="2" selected>2</option>
+          <option value="3">3</option>
+        </select>
+      </label>
+      <button id="analyzeBtn" class="primary">Analyze / Deobfuscate</button>
+      <span id="status"></span>
+    </div>
+
+    <section class="results">
+      <div class="card">
+        <h3>Findings</h3>
+        <ul id="findings"><li>아직 분석하지 않았습니다.</li></ul>
+      </div>
+      <div class="card">
+        <h3>Warnings</h3>
+        <ul id="warnings"><li>아직 분석하지 않았습니다.</li></ul>
+      </div>
+      <div class="card">
+        <h3>Decoded strings</h3>
+        <pre id="decoded">아직 분석하지 않았습니다.</pre>
+      </div>
+    </section>
+  </main>
+
+<script>
+const input = document.getElementById("input");
+const output = document.getElementById("output");
+const status = document.getElementById("status");
+
+document.getElementById("analyzeBtn").onclick = async () => {
+  const code = input.value;
+  if (!code.trim()) {
+    status.textContent = "Lua 코드를 입력하세요.";
+    return;
+  }
+
+  status.textContent = "분석 중...";
+
+  try {
+    const res = await fetch("/api/deobfuscate", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({code, ai: document.getElementById("aiToggle").checked, passes: Number(document.getElementById("passes").value)})
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || "Request failed");
+
+    output.value = data.code || "";
+    renderList("findings", data.findings, "특이사항 없음");
+    renderList("warnings", data.warnings, "경고 없음");
+    document.getElementById("decoded").textContent =
+      data.decoded_strings?.length
+        ? data.decoded_strings.map(x => `ENCODED: ${x.encoded}\nDECODED: ${x.decoded}`).join("\n\n")
+        : "발견된 printable Base64 문자열이 없습니다.";
+
+    status.textContent = `완료 · ${data.stats.input_chars.toLocaleString()} chars`;
+  } catch (e) {
+    status.textContent = "오류: " + e.message;
+  }
+};
+
+function renderList(id, items, empty) {
+  const el = document.getElementById(id);
+  el.innerHTML = "";
+  if (!items || !items.length) {
+    const li = document.createElement("li");
+    li.textContent = empty;
+    el.appendChild(li);
+    return;
+  }
+  items.forEach(item => {
+    const li = document.createElement("li");
+    li.textContent = item;
+    el.appendChild(li);
+  });
+}
+
+document.getElementById("copyBtn").onclick = async () => {
+  await navigator.clipboard.writeText(output.value);
+  status.textContent = "복사했습니다.";
+};
+
+document.getElementById("clearBtn").onclick = () => {
+  input.value = "";
+  output.value = "";
+  status.textContent = "";
+  document.getElementById("findings").innerHTML = "<li>아직 분석하지 않았습니다.</li>";
+  document.getElementById("warnings").innerHTML = "<li>아직 분석하지 않았습니다.</li>";
+  document.getElementById("decoded").textContent = "아직 분석하지 않았습니다.";
+};
+</script>
+</body>
+</html>
